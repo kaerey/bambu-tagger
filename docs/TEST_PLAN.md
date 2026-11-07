@@ -15,7 +15,8 @@ No APK was built in the file-creation environment. Perform these tests with an e
 - [ ] Selecting a different repository or invalid name reports a useful error.
 
 ## NFC — read only
-- [ ] Read blank known-working blue Gen 2/CUID keyfob, 16 sectors readable.
+- [ ] Read blank known-working blue Gen 2/CUID keyfob, 16 sectors readable, factory-writable status Yes.
+- [ ] Read an already-cloned Bambu fob: identify `87878769` locked sectors, report not writable, and refuse another write *before modifying any block*.
 - [ ] NTAG215 tag rejected as unsupported with no write.
 - [ ] Fixed UID PVC puck reads but write should fail safely; never expect it to clone.
 
