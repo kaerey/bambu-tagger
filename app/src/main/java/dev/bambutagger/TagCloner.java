@@ -20,6 +20,10 @@ public final class TagCloner {
     public interface Progress { void update(String message); }
     public static final byte[] FF = Hex.decode("FFFFFFFFFFFF");
     public static final byte[] ZERO = Hex.decode("000000000000");
+    // A factory-formatted Classic 1K tag can be programmed. Bambu's final
+    // access bits are read-only: a successful clone is generally not rewritable.
+    private static final byte[] TRANSPORT_ACCESS = Hex.decode("FF078069");
+    private static final byte[] BAMBU_ACCESS = Hex.decode("87878769");
     private final Context context;
     private final android.content.SharedPreferences preferences;
 
@@ -28,8 +32,13 @@ public final class TagCloner {
         public final int sectors;
         public final int readableSectors;
         public final String material;
-        CardInfo(String uid, int sectors, int readableSectors, String material) {
-            this.uid=uid;this.sectors=sectors;this.readableSectors=readableSectors;this.material=material;
+        public final int lockedBambuSectors;
+        public final boolean factoryWritable;
+        CardInfo(String uid, int sectors, int readableSectors, String material,
+                 int lockedBambuSectors, boolean factoryWritable) {
+            this.uid=uid;this.sectors=sectors;this.readableSectors=readableSectors;
+            this.material=material;this.lockedBambuSectors=lockedBambuSectors;
+            this.factoryWritable=factoryWritable;
         }
     }
 
@@ -102,21 +111,48 @@ public final class TagCloner {
         throw new IllegalStateException("Cannot authenticate sector " + sector + ". Tag may use unknown keys. Aborting without a write.");
     }
 
+    /** Access bytes remain readable even though Key A/B are masked in trailer reads. */
+    private static byte[] accessBytes(MifareClassic mifare, int sector) throws Exception {
+        byte[] trailer = mifare.readBlock(sector * 4 + 3);
+        return Arrays.copyOfRange(trailer, 6, 10);
+    }
+
     public CardInfo inspect(Tag tag) throws Exception {
         MifareClassic mifare=open(tag);
         try {
             byte[] uid=tag.getId();
-            int readable=0;
+            int readable=0, transport=0, locked=0;
             String material="Unknown";
             for (int sector=0;sector<16;sector++) {
                 try {
                     auth(mifare,sector,uid,null);
-                    readable++;
+                    byte[] access = accessBytes(mifare,sector);
+                    if (Arrays.equals(access,TRANSPORT_ACCESS)) transport++;
+                    if (Arrays.equals(access,BAMBU_ACCESS)) locked++;
                     if (sector==1) material=Hex.ascii(mifare.readBlock(4));
+                    readable++;
                 } catch(Exception ignored) { /* Report unavailable sectors; read-only inspection. */ }
             }
-            return new CardInfo(Hex.encode(uid),16,readable,material);
+            return new CardInfo(Hex.encode(uid),16,readable,material,locked,
+                    readable==16 && transport==16);
         } finally {mifare.close();}
+    }
+
+    /** Fail before modifying anything if a sector is no longer in factory write mode. */
+    private void requireFactoryWritable(MifareClassic mifare, byte[] uid, BambuDump target)
+            throws Exception {
+        for(int sector=0;sector<16;sector++) {
+            auth(mifare,sector,uid,target);
+            byte[] access=accessBytes(mifare,sector);
+            if(!Arrays.equals(access,TRANSPORT_ACCESS)) {
+                String detail=Arrays.equals(access,BAMBU_ACCESS)
+                        ? " (Bambu's read-only access permissions)"
+                        : " (custom or locked permissions)";
+                throw new IllegalStateException("Sector "+sector+" has access bits "+
+                        Hex.encode(access)+detail+". Expected FF078069 for a blank writable fob. "+
+                        "No blocks were modified. Use a new factory-formatted CUID fob.");
+            }
+        }
     }
 
     private String backup(MifareClassic mifare, byte[] uid, BambuDump target, Progress progress) throws Exception {
@@ -163,6 +199,9 @@ public final class TagCloner {
         MifareClassic mifare=open(tag);
         try {
             byte[] originalUid=tag.getId();
+            // Recheck on the WRITE tap, not only during the first preview scan.
+            // Avoid partially overwriting a previously cloned, factory-locked tag.
+            requireFactoryWritable(mifare,originalUid,target);
             String backupName=backup(mifare,originalUid,target,progress);
             preferences.edit().putString("last_original_uid",Hex.encode(originalUid)).commit();
             progress.update("Backup saved. Writing 15 data sectors — keep tag against phone.");
