@@ -214,18 +214,12 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
             space(panel,4);
             panel.addView(text("Use a compatible 13.56 MHz Gen 2/CUID fob. Never use a genuine Bambu tag.",12,MUTED,false));
             space(panel,12);
-            TextView modeSwitch=press(reusableMode
-                    ? "EXPERIMENTAL Reusable Mode: ON"
-                    : "Reusable Mode: OFF  ·  Exact clone",
-                    reusableMode?CAUTION:PANEL2,reusableMode?BACKGROUND:TEXT);
-            modeSwitch.setContentDescription("Toggle experimental reusable tag writing. Currently "+(reusableMode?"on":"off"));
+            TextView modeSwitch=press("Reusable Mode: PAUSED",PANEL2,CAUTION);
+            modeSwitch.setContentDescription("Experimental reusable tag mode is paused due to reported AMS 2 Pro soft-bricking of Gen 2/CUID tags");
             panel.addView(modeSwitch,lp(-1,56));
             modeSwitch.setOnClickListener(v->changeWriteMode());
             space(panel,7);
-            panel.addView(text(reusableMode
-                    ? "Writes writable FF078069 access permissions. Android may verify it but AMS acceptance is UNKNOWN."
-                    : "Default: exact Bambu sector trailer permissions (87878769). Clones are normally one-time use.",
-                    12,reusableMode?CAUTION:MUTED,false));
+            panel.addView(text("PAUSED: An experimental CUID fob became unreadable after AMS 2 Pro use. Even exact CUID clones can be damaged by AMS firmware; use a disposable fob and verify before/after.",12,CAUTION,false));
             space(body,8);
         }
         LinearLayout r=row();body.addView(r,lp(-1,-2));
@@ -398,25 +392,16 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
     }
 
     private void changeWriteMode() {
-        if(reusableMode) {
-            reusableMode=false;
-            action=TapAction.NONE;
-            verifyAfterWriteMode=null;
-            status="Exact Bambu clone mode selected. Completed clones are normally read-only.";
-            render();
-            return;
-        }
+        // Public experiment is paused after an AMS 2 Pro soft-brick report.
+        // Keep the lower-level code for research, but do not expose destructive
+        // experimental writes until hardware compatibility is better understood.
+        reusableMode=false;
+        action=TapAction.NONE;
+        verifyAfterWriteMode=null;
         new AlertDialog.Builder(this)
-            .setTitle("Experimental Reusable Tag Mode")
-            .setMessage("WARNING: This is an untested alteration of the Bambu dump. The app will retain factory-writable sector access bytes (FF078069), rather than Bambu's locked access bytes (87878769).\n\nThe AMS 2 Pro may reject the tag, modify it, or leave the tag unusable.\n\nTest on an expendable blue CUID fob only. Verify on Android AND test AMS recognition before attempting any rewrite. Never use a genuine Bambu spool.")
-            .setNegativeButton("Keep exact clone",null)
-            .setPositiveButton("Enable experiment",(dialog,which)->{
-                reusableMode=true;
-                action=TapAction.NONE;
-                verifyAfterWriteMode=null;
-                status="Experimental reusable mode ON. AMS compatibility unknown.";
-                render();
-            }).show();
+            .setTitle("Reusable Mode paused")
+            .setMessage("A blue Gen 2/CUID fob became unrecognizable as MIFARE Classic after an experimental write and an AMS 2 Pro scan (SAK 00). The cause is not yet proven, but similar AMS-induced Block 0 corruption is documented.\n\nReusable Mode is temporarily disabled. Exact clones may also be damaged by some AMS firmware. Do not test on genuine spool tags; use disposable fobs only.")
+            .setPositiveButton("OK",null).show();
     }
 
     private void beginWrite() {
@@ -424,6 +409,8 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
         if(adapter==null||!adapter.isEnabled()){status="Please enable NFC before writing.";refreshStatus();return;}
         String message="Selected: "+selectedLabel+"\n\nExpected UID: "+selected.uidHex+
             "\n\nWRITE MODE: "+(reusableMode?"EXPERIMENTAL reusable (AMS acceptance UNKNOWN)":"Exact clone (normally one-time use)")+
+            "\n\nWARNING: AMS 2 Pro may corrupt Gen 2/CUID tags, including exact clones. " +
+            "A test fob has already stopped reporting as MIFARE Classic after an AMS scan. " +
             "\n\nA compatible UID-changeable MIFARE Classic 1K fob is required. " +
             "Writing can permanently damage an incompatible tag. Do NOT scan a genuine Bambu spool. " +
             "You will first scan the destination fob and then confirm its exact UID before the app writes anything.";
