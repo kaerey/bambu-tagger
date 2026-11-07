@@ -24,6 +24,16 @@ public final class TagCloner {
     // access bits are read-only: a successful clone is generally not rewritable.
     private static final byte[] TRANSPORT_ACCESS = Hex.decode("FF078069");
     private static final byte[] BAMBU_ACCESS = Hex.decode("87878769");
+
+    /** Experimental mode differs from a genuine dump only in sector trailer access bytes. */
+    public enum WriteMode { AUTHENTIC_CLONE, REUSABLE_EXPERIMENTAL }
+
+    private static byte[] finalTrailer(BambuDump target, int sector, WriteMode mode) {
+        byte[] trailer=Arrays.copyOf(target.blocks[sector*4+3],16);
+        if(mode==WriteMode.REUSABLE_EXPERIMENTAL)
+            System.arraycopy(TRANSPORT_ACCESS,0,trailer,6,4);
+        return trailer;
+    }
     private final Context context;
     private final android.content.SharedPreferences preferences;
 
@@ -73,7 +83,7 @@ public final class TagCloner {
     private Auth auth(MifareClassic mifare, int sector, byte[] uid,
                              BambuDump next) throws Exception {
         List<Auth> keys = new ArrayList<>();
-        // Blank cards and previously cloned Bambu tags are both supported.
+        // Factory-formatted or previously experimentally-writable tags are supported.
         add(keys, FF, false);
         add(keys, FF, true);
         add(keys, ZERO, false);
@@ -189,13 +199,16 @@ public final class TagCloner {
 
     /**
      * Write sectors 15..1 first, leaving the manufacturer sector for last.
+     * Experimental mode retains writable FF078069 permissions while writing the
+     * original signed data/UID and derived A/B keys. AMS acceptance is unknown.
      * Block 0 must be written BEFORE the new sector-0 trailer: the Bambu trailer's
      * access bits restrict data writes and may lock out block-0 writing on some tags.
      * Some CUID tags also drop the RF session after UID replacement. If that happens,
      * keep the recovery UID available for reauthentication on a subsequent tap.
      * Success is never assumed until a separate NFC verification tap succeeds.
      */
-    public String write(Tag tag, BambuDump target, Progress progress) throws Exception {
+    public String write(Tag tag, BambuDump target, WriteMode mode, Progress progress) throws Exception {
+        if(mode==null) throw new IllegalArgumentException("Write mode required");
         MifareClassic mifare=open(tag);
         try {
             byte[] originalUid=tag.getId();
@@ -211,7 +224,7 @@ public final class TagCloner {
                 // Write normal data before the trailer changes write permissions.
                 for(int offset=0;offset<3;offset++)
                     mifare.writeBlock(first+offset,target.blocks[first+offset]);
-                mifare.writeBlock(first+3,target.blocks[first+3]);
+                mifare.writeBlock(first+3,finalTrailer(target,sector,mode));
                 if (!mifare.authenticateSectorWithKeyA(sector,target.keysA[sector]))
                     throw new IllegalStateException("Sector "+sector+" did not accept the new Key A. Tag may be partially written.");
                 for(int offset=0;offset<3;offset++) {
@@ -227,13 +240,14 @@ public final class TagCloner {
             // Gen 2/CUID manufacturer block is written with a normal Mifare write.
             // A fixed-UID or Gen 1 tag may reject this write.
             mifare.writeBlock(0,target.blocks[0]);
-            mifare.writeBlock(3,target.blocks[3]);
+            mifare.writeBlock(3,finalTrailer(target,0,mode));
             progress.update("Write command finished. Lift the fob and tap again to verify.");
             return backupName;
         } finally {mifare.close();}
     }
 
-    public String verify(Tag tag, BambuDump target, Progress progress) throws Exception {
+    public String verify(Tag tag, BambuDump target, WriteMode mode, Progress progress) throws Exception {
+        if(mode==null) throw new IllegalArgumentException("Verification mode required");
         MifareClassic mifare=open(tag);
         try {
             String uid=Hex.encode(tag.getId());
@@ -249,15 +263,20 @@ public final class TagCloner {
                         throw new IllegalStateException("Verification mismatch: sector "+sector+", block "+offset);
                 }
                 byte[] trailer=mifare.readBlock(sector*4+3);
+                byte[] expectedTrailer=finalTrailer(target,sector,mode);
                 for(int i=6;i<=9;i++) {
-                    if(trailer[i]!=target.blocks[sector*4+3][i])
-                        throw new IllegalStateException("Sector trailer permissions mismatch in sector "+sector);
+                    if(trailer[i]!=expectedTrailer[i])
+                        throw new IllegalStateException("Sector trailer permissions mismatch in sector "+sector+
+                            ". Expected "+Hex.encode(Arrays.copyOfRange(expectedTrailer,6,10))+
+                            ", found "+Hex.encode(Arrays.copyOfRange(trailer,6,10)));
                 }
                 if (!mifare.authenticateSectorWithKeyB(sector,target.keysB[sector]))
                     throw new IllegalStateException("Key B verification failed in sector "+sector);
                 if(sector%4==3)progress.update("Verified "+(sector+1)+"/16 sectors");
             }
-            return "UID, 48 data blocks, 16 access trailers, and Key A/B authentication verified. AMS recognition still depends on the printer.";
+            return mode==WriteMode.REUSABLE_EXPERIMENTAL
+                ? "EXPERIMENTAL: UID, signed dump data, all 16 writable access trailers (FF078069), and Key A/B authentication verified on Android. This is NOT an exact Bambu clone. AMS 2 Pro acceptance and later rewriting remain untested."
+                : "Exact-clone memory verification: UID, 48 data blocks, 16 Bambu access trailers, and Key A/B authentication verified. AMS recognition still depends on the printer.";
         } finally {mifare.close();}
     }
 }
