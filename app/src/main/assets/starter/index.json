@@ -1,0 +1,74 @@
+[
+  {
+    "filename": "SUNLU_PLA_YELLOW_0524A124.bin",
+    "alias": "SUNLU PLA Yellow",
+    "bambu": "Bambu PLA Basic Yellow",
+    "color": "#F4EE2A",
+    "uid": "0524A124",
+    "note": "Closest standard yellow. Third-party material profile remains separate."
+  },
+  {
+    "filename": "SUNLU_PLA_SUNFLOWER_ALTERNATIVE_0625AFE6.bin",
+    "alias": "SUNLU PLA Yellow \u2014 golden option",
+    "bambu": "Bambu PLA Basic Sunflower Yellow",
+    "color": "#FEC600",
+    "uid": "0625AFE6",
+    "note": "Alternative if your physical yellow leans golden/orange."
+  },
+  {
+    "filename": "SUNLU_PLA_MAGENTA_05591C03.bin",
+    "alias": "SUNLU PLA Magenta",
+    "bambu": "Bambu PLA Basic Magenta",
+    "color": "#EC008C",
+    "uid": "05591C03",
+    "note": "Bambu material/color approximation; select a tested SUNLU print profile in the slicer."
+  },
+  {
+    "filename": "SUNLU_PLA_PLUS_PURPLE_05898F10.bin",
+    "alias": "SUNLU PLA+ Master Ball Purple",
+    "bambu": "Bambu PLA Basic Purple",
+    "color": "#5E43B7",
+    "uid": "05898F10",
+    "note": "Bambu PLA Basic Purple (rich violet), not a PLA+ profile. Check nozzle temperature."
+  },
+  {
+    "filename": "SUNLU_PLA_TRANSPARENT_3EC61C99.bin",
+    "alias": "SUNLU PLA Transparent",
+    "bambu": "Bambu PLA Translucent Ice Blue",
+    "color": "#B8CDE9",
+    "uid": "3EC61C99",
+    "note": "No colorless PLA dump found. Ice Blue is translucent but has a pale blue tint."
+  },
+  {
+    "filename": "POLYMAKER_PLA_RED_00D83F5F.bin",
+    "alias": "Polymaker PLA Red",
+    "bambu": "Bambu PLA Basic Red",
+    "color": "#C00D1E",
+    "uid": "00D83F5F",
+    "note": "Bambu color match; keep your Polymaker print temperatures and flow calibration."
+  },
+  {
+    "filename": "POLYMAKER_SILK_BLUE_5A04A2FB.bin",
+    "alias": "Polymaker Silk Blue",
+    "bambu": "Bambu PLA Silk Blue",
+    "color": "#147BD1",
+    "uid": "5A04A2FB",
+    "note": "Bambu silk identity; verify temperature and speed on Polymaker silk PLA."
+  },
+  {
+    "filename": "ELEGOO_RAPID_PETG_BLACK_02B9F125.bin",
+    "alias": "Elegoo Rapid PETG Black",
+    "bambu": "Bambu PETG HF Black",
+    "color": "#000000",
+    "uid": "02B9F125",
+    "note": "Bambu PETG HF identity; use a tested Elegoo Rapid PETG print profile."
+  },
+  {
+    "filename": "ENDER_PLA_PLUS_RAINBOW_0A7DCEDF.bin",
+    "alias": "Ender PLA+ Rainbow",
+    "bambu": "Bambu PLA Basic Gradient Solar Breeze",
+    "color": "#E94B3C",
+    "uid": "0A7DCEDF",
+    "note": "Bambu Solar Breeze gradient is only an approximation; colors may not match the actual rainbow."
+  }
+]
