@@ -10,7 +10,7 @@ Native, touch-first Android app for writing compatible MIFARE Classic 1K magic N
 - Saved third-party filament shortcuts, with color swatches and clearly labeled approximate matches.
 - Bundled signed 1K dumps readable without internet, including **SUNLU Yellow** (`Bambu PLA Basic Yellow`, color `#F4EE2A`, UID `0524A124`) and **SUNLU Yellow — golden alternative** (`Bambu PLA Basic Sunflower Yellow`, `#FEC600`, UID `0625AFE6`).
 - Public GitHub repository browsing `Material category → Material → Color → UID`, with signed dump download and on-device cache, using the format of `queengooborg/Bambu-Lab-RFID-Library`.
-- Native `android.nfc.tech.MifareClassic` read / write / verify operations. Supports Gen 2/CUID tags which permit writing manufacturer block 0 with regular MIFARE write instructions; *FUID may work*, contingent on tag and hardware.
+- Native `android.nfc.tech.MifareClassic` read / write / verify operations. Supports factory-formatted Gen 2/CUID tags which permit writing manufacturer block 0 with regular MIFARE write instructions; *FUID may work*, contingent on tag and hardware. After Bambu's `87878769` permissions are applied, the resulting tag's data blocks become read-only. **Treat a successful clone as one-time-use, not reusable for another filament.**
 - Two-tap write workflow (read-only destination preview, explicit UID confirmation, second NFC tap to write), local pre-write backups, and separate read-back verification.
 - Automatically derives Bambu MIFARE sector keys A/B from a tag UID using the community's published HKDF-SHA256 algorithm. Does **not** derive or forge RSA signatures.
 - Optional alternate compatible GitHub repository (`owner/repo`) using the same folder and `-dump.json` schema.
@@ -51,7 +51,7 @@ The workflow was **not executed** when the ZIP was created. It may reveal compil
 - Third-party print profiles are **not** encoded: the AMS sees the *Bambu* material/color represented by the selected signed dump.
 - "SUNLU PLA Transparent" currently maps to Translucent Ice Blue (tinted), not true colorless PLA.
 - Some Gen 2 CUID tags may fail with Bambu AMS firmware despite successful writes.
-- Previously written tags may no longer be writable due to locked MIFARE access bits; recovery needs additional hardware or new blanks.
+- Previously cloned Bambu tags normally have permanently read-only sector permissions (`87878769`). The app checks all 16 sector trailers before writing and refuses non-factory (`FF078069`) access bytes. Use a new blank fob for a different filament.
 - Library browsing requires GitHub access; GitHub anonymous API rate limits apply. Cached folders and downloaded data remain available until cleared.
 - Advanced paired-tag finder, custom aliases, file import/export, backups export, and full-text search across all remote colors are planned but not implemented in v0.1.
 
