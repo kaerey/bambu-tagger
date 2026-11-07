@@ -44,3 +44,9 @@ No APK was built in the file-creation environment. Perform these tests with an e
 - [ ] Attempt second write with another material only if both AMS acceptance and writability survived.
 - [ ] Exact mode still expects `87878769` access bytes; exact clones are rejected by preflight for rewriting.
 - [ ] Interrupted writes remain errors, never successes. Keep backups; avoid genuine Bambu tags.
+
+
+### Safety hold (2026-11)
+- [ ] Reusable Mode shows **PAUSED** and cannot be armed in the public UI after issue #3.
+- [ ] Exact-clone confirmation warns the AMS 2 Pro may corrupt Gen 2/CUID Block 0, even with full signed dumps.
+- [ ] Do not conduct more AMS experimental tests before investigating the first soft-bricked fob and capturing pre-/post-AMS UID, ATQA, SAK and Android verify state.
