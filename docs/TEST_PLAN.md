@@ -32,3 +32,15 @@ No APK was built in the file-creation environment. Perform these tests with an e
 - [ ] Remove fob while writing. App describes partial-write risk and does not falsely claim success.
 - [ ] Test recovery with original UID recorded in app preferences and backups; do not promise full restoration.
 - [ ] Check no write starts on screen rotations or background/foreground transitions.
+
+
+## Experimental Reusable Tag Mode validation
+- [ ] Mode defaults OFF after app restart; requires warning confirmation when enabled.
+- [ ] Fresh spare CUID tag reads 16/16 sectors and factory permissions `FF078069`.
+- [ ] Select SUNLU Yellow; turn ON Reusable Tag Mode; confirm the write dialog clearly says EXPERIMENTAL.
+- [ ] First tap only previews, second tap writes, third tap verifies target UID, all 48 data blocks, keys A/B, and all 16 `FF078069` access-byte values.
+- [ ] Verify displays 'AMS acceptance UNKNOWN' and does not assert an exact Bambu dump.
+- [ ] Test AMS 2 Pro recognition. Afterwards inspect the fob and confirm writable permissions remain on all 16 sectors.
+- [ ] Attempt second write with another material only if both AMS acceptance and writability survived.
+- [ ] Exact mode still expects `87878769` access bytes; exact clones are rejected by preflight for rewriting.
+- [ ] Interrupted writes remain errors, never successes. Keep backups; avoid genuine Bambu tags.

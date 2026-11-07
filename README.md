@@ -1,4 +1,4 @@
-# Bambu Tagger — Android (prototype v0.1)
+# Bambu Tagger — Android (prototype v0.2-dev)
 
 Native, touch-first Android app for writing compatible MIFARE Classic 1K magic NFC tags using **existing signed Bambu Lab filament RFID identities**. Includes 9 offline shortcuts (7 original aliases plus SUNLU Yellow and a Sunflower Yellow alternative) and a live, cached GitHub library browser.
 
@@ -62,3 +62,10 @@ The workflow was **not executed** when the ZIP was created. It may reveal compil
 - [`ikarus23/MifareClassicTool`](https://github.com/ikarus23/MifareClassicTool), open-source Android NFC behavior reference (GPL-3.0).
 
 The project's code is GPL-3.0; see `LICENSE`. It uses Android's standard NFC API rather than embedding or modifying MIFARE Classic Tool app source. The bundled RFID dumps retain their original provenance.
+
+
+## Experimental Reusable Tag Mode (opt-in)
+
+Select a filament, then tap **Reusable Mode: OFF** in its card. Confirm the warning to enable the experiment; it resets to OFF on app restart. The default remains an exact, normally one-time clone. Experimental mode changes **only** the sector trailer access-condition bytes from `87878769` to the transport/writable format `FF078069`, preserving the community dump's UID, material data, and sector Key A/B. This is **not an exact Bambu clone**, and the app does not perform cryptographic RSA signature validation. Android verification checks data and permissions, not AMS recognition.
+
+Both modes require factory-writable `FF078069` on all 16 sectors before writing. This also permits a *potential* second write of an experimental tag with unchanged writable permissions, authenticated using its current UID-derived keys. Exact Bambu clones with `87878769` remain locked and rejected at preflight. The tag might become unreadable or be rejected/modified by the AMS even when Android verification succeeds. **First test:** fresh disposable blue Gen 2/CUID fob → SUNLU Yellow experimental write → Android verification → AMS 2 Pro recognition test → Android read and permission check. Only if the AMS accepts the tag *and* permissions remain writable should you attempt another filament write. Never test on genuine Bambu spool tags.

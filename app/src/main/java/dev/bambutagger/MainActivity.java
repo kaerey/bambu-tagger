@@ -54,6 +54,11 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
     private enum TapAction { NONE, INSPECT, PREVIEW_WRITE, WRITE, VERIFY }
     private volatile TapAction action = TapAction.NONE;
     private String previewUid = "";
+    private String previewTargetUid = "";
+    // The experimental mode is deliberately opt-in per launch.
+    private boolean reusableMode = false;
+    private TagCloner.WriteMode armedMode = TagCloner.WriteMode.AUTHENTIC_CLONE;
+    private TagCloner.WriteMode verifyAfterWriteMode = null;
     private final AtomicBoolean busy = new AtomicBoolean(false);
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -178,7 +183,7 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
         LinearLayout headline=column();heading.addView(headline,new LinearLayout.LayoutParams(0,-2,1));
         headline.addView(text("BAMBU TAGGER",23,TEXT,true));
         headline.addView(text("Community RFID  ·  Android NFC",12,MUTED,false));
-        TextView sync=chip("v0.1",ACCENT,PANEL2);heading.addView(sync);
+        TextView sync=chip("v0.2 dev",ACCENT,PANEL2);heading.addView(sync);
         space(header,16);
         LinearLayout tabs=row();header.addView(tabs,lp(-1,-2));
         TextView home=press("My filaments",browsing?PANEL2:ACCENT,browsing?TEXT:BACKGROUND);
@@ -206,7 +211,21 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
             labels.addView(text(selectedLabel,17,TEXT,true));labels.addView(text(selected.filament+"  ·  "+selected.family,13,MUTED,false));
             space(panel,8);panel.addView(text("UID  "+selected.uidHex,13,ACCENT,true));
             if(!selectedNote.isEmpty()){space(panel,8);panel.addView(text(selectedNote,13,CAUTION,false));}
-            space(panel,4);panel.addView(text("Ready to clone a compatible 13.56 MHz Gen 2/CUID or FUID tag.",12,MUTED,false));
+            space(panel,4);
+            panel.addView(text("Use a compatible 13.56 MHz Gen 2/CUID fob. Never use a genuine Bambu tag.",12,MUTED,false));
+            space(panel,12);
+            TextView modeSwitch=press(reusableMode
+                    ? "EXPERIMENTAL Reusable Mode: ON"
+                    : "Reusable Mode: OFF  ·  Exact clone",
+                    reusableMode?CAUTION:PANEL2,reusableMode?BACKGROUND:TEXT);
+            modeSwitch.setContentDescription("Toggle experimental reusable tag writing. Currently "+(reusableMode?"on":"off"));
+            panel.addView(modeSwitch,lp(-1,56));
+            modeSwitch.setOnClickListener(v->changeWriteMode());
+            space(panel,7);
+            panel.addView(text(reusableMode
+                    ? "Writes writable FF078069 access permissions. Android may verify it but AMS acceptance is UNKNOWN."
+                    : "Default: exact Bambu sector trailer permissions (87878769). Clones are normally one-time use.",
+                    12,reusableMode?CAUTION:MUTED,false));
             space(body,8);
         }
         LinearLayout r=row();body.addView(r,lp(-1,-2));
@@ -260,7 +279,7 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
         try(InputStream in=getAssets().open("starter/"+item.filename)) {
             BambuDump dump=BambuDump.fromBinary(readAll(in));
             if(!dump.uidHex.equalsIgnoreCase(item.uid))throw new IllegalArgumentException("Packaged UID mismatch");
-            selected=dump;selectedLabel=item.alias;selectedNote=item.note;
+            selected=dump;selectedLabel=item.alias;selectedNote=item.note;verifyAfterWriteMode=null;
             status="Selected "+item.bambu+". Tap Write fob when ready.";
             action=TapAction.NONE;browsing=false;render();
         }catch(Exception e){showError("Cannot load bundled RFID data",e);}
@@ -327,7 +346,7 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
             try {
                 BambuDump dump=catalog.loadDump(path);
                 main.post(()->{
-                    selected=dump;selectedLabel="Bambu "+dump.filament+"  ·  "+lastColor(path);
+                    selected=dump;verifyAfterWriteMode=null;selectedLabel="Bambu "+dump.filament+"  ·  "+lastColor(path);
                     selectedNote="Downloaded community dump; Bambu brand identity. Keep its signed data unchanged.";
                     browsing=false;action=TapAction.NONE;
                     status="Downloaded and checked UID "+dump.uidHex+". Ready for writing.";render();
@@ -370,13 +389,41 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
         writeButton.setEnabled(selected!=null);writeButton.setAlpha(selected!=null?1f:.4f);
         writeButton.setOnClickListener(t->beginWrite());
         verifyButton.setEnabled(selected!=null);verifyButton.setAlpha(selected!=null?1f:.4f);
-        verifyButton.setOnClickListener(t->arm(TapAction.VERIFY,"Tap the programmed fob to verify UID, memory, and authentication keys."));
+        verifyButton.setOnClickListener(t->{verifyAfterWriteMode=null;arm(TapAction.VERIFY,"Tap the fob to verify UID, memory, keys and "+(reusableMode?"reusable":"Bambu")+" permissions.");});
+    }
+
+    private TagCloner.WriteMode currentWriteMode() {
+        return reusableMode ? TagCloner.WriteMode.REUSABLE_EXPERIMENTAL
+                            : TagCloner.WriteMode.AUTHENTIC_CLONE;
+    }
+
+    private void changeWriteMode() {
+        if(reusableMode) {
+            reusableMode=false;
+            action=TapAction.NONE;
+            verifyAfterWriteMode=null;
+            status="Exact Bambu clone mode selected. Completed clones are normally read-only.";
+            render();
+            return;
+        }
+        new AlertDialog.Builder(this)
+            .setTitle("Experimental Reusable Tag Mode")
+            .setMessage("WARNING: This is an untested alteration of the Bambu dump. The app will retain factory-writable sector access bytes (FF078069), rather than Bambu's locked access bytes (87878769).\n\nThe AMS 2 Pro may reject the tag, modify it, or leave the tag unusable.\n\nTest on an expendable blue CUID fob only. Verify on Android AND test AMS recognition before attempting any rewrite. Never use a genuine Bambu spool.")
+            .setNegativeButton("Keep exact clone",null)
+            .setPositiveButton("Enable experiment",(dialog,which)->{
+                reusableMode=true;
+                action=TapAction.NONE;
+                verifyAfterWriteMode=null;
+                status="Experimental reusable mode ON. AMS compatibility unknown.";
+                render();
+            }).show();
     }
 
     private void beginWrite() {
         if(selected==null){status="Select a filament before writing.";refreshStatus();return;}
         if(adapter==null||!adapter.isEnabled()){status="Please enable NFC before writing.";refreshStatus();return;}
         String message="Selected: "+selectedLabel+"\n\nExpected UID: "+selected.uidHex+
+            "\n\nWRITE MODE: "+(reusableMode?"EXPERIMENTAL reusable (AMS acceptance UNKNOWN)":"Exact clone (normally one-time use)")+
             "\n\nA compatible UID-changeable MIFARE Classic 1K fob is required. " +
             "Writing can permanently damage an incompatible tag. Do NOT scan a genuine Bambu spool. " +
             "You will first scan the destination fob and then confirm its exact UID before the app writes anything.";
@@ -435,11 +482,15 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
                         new AlertDialog.Builder(this).setTitle("Confirm destination tag")
                             .setMessage("Destination UID: "+info.uid+"\nCurrent data: "+source+
                                 "\n\nProgram as: "+selectedLabel+"\nNew UID: "+selected.uidHex+
+                                "\n\nMode: "+(reusableMode?"EXPERIMENTAL writable permissions":"Exact Bambu clone")+
                                 "\n\nThis rewrites all 16 sectors and the UID. Some tags cannot be restored. " +
                                 "Only continue if this is your expendable fresh, factory-formatted keyfob. REMOVE it now; you must tap it again to write.")
                             .setNegativeButton("Cancel",null)
                             .setPositiveButton("Arm write",(d,which)->{
-                                previewUid=info.uid;arm(TapAction.WRITE,"Write armed for UID "+previewUid+". Lift and tap SAME fob again; keep it still.");
+                                previewUid=info.uid;
+                                previewTargetUid=selected.uidHex;
+                                armedMode=currentWriteMode();
+                                arm(TapAction.WRITE,"Write armed for UID "+previewUid+" ("+(armedMode==TagCloner.WriteMode.REUSABLE_EXPERIMENTAL?"EXPERIMENTAL":"exact")+"). Lift and tap SAME fob again; keep it still.");
                             }).show();
                     });
                 }else if(todo==TapAction.WRITE) {
@@ -447,24 +498,34 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
                     if(!found.equalsIgnoreCase(previewUid)) throw new IllegalStateException("Different tag detected ("+found+"). Expected "+previewUid+"; no changes made.");
                     BambuDump target=selected;
                     if(target==null)throw new IllegalStateException("No filament selected");
-                    setStatus("Writing "+target.uidHex+" — keep NFC tag firmly against the phone.");
-                    String saved=cloner.write(tag,target,this::setStatus);
+                    if(!target.uidHex.equalsIgnoreCase(previewTargetUid))
+                        throw new IllegalStateException("Filament changed after confirmation; no blocks modified.");
+                    final TagCloner.WriteMode mode=armedMode;
+                    setStatus("Writing "+target.uidHex+" ("+(mode==TagCloner.WriteMode.REUSABLE_EXPERIMENTAL?"reusable EXPERIMENT":"exact clone")+") — keep fob steady.");
+                    String saved=cloner.write(tag,target,mode,this::setStatus);
                     main.post(()->{
                         action=TapAction.VERIFY;
-                        status="Write finished. Backup "+saved+" saved. LIFT the fob, then TAP AGAIN to verify.";refreshStatus();
+                        verifyAfterWriteMode=mode;
+                        status="Write finished ("+(mode==TagCloner.WriteMode.REUSABLE_EXPERIMENTAL?"EXPERIMENTAL":"exact")+"). LIFT and TAP AGAIN to verify.";refreshStatus();
                         new AlertDialog.Builder(this).setTitle("Write finished — verify next")
-                            .setMessage("A write completion is not proof the tag works. Remove the fob, then tap it again to verify the complete identity.\n\nBackup: "+saved)
+                            .setMessage("A write completion is not proof the tag works. Remove the fob, then tap it again for "+(mode==TagCloner.WriteMode.REUSABLE_EXPERIMENTAL?"experimental permission-aware":"exact clone")+" verification.\n\nBackup: "+saved)
                             .setPositiveButton("Verify with next tap",null).show();
                     });
                 }else if(todo==TapAction.VERIFY) {
                     BambuDump target=selected;
                     if(target==null)throw new IllegalStateException("Select a filament first");
-                    String result=cloner.verify(tag,target,this::setStatus);
+                    final TagCloner.WriteMode mode=verifyAfterWriteMode!=null?verifyAfterWriteMode:currentWriteMode();
+                    String result=cloner.verify(tag,target,mode,this::setStatus);
                     main.post(()->{
                         action=TapAction.NONE;
-                        status="Verified "+target.uidHex+". Ready to test in the AMS.";refreshStatus();
+                        status=(mode==TagCloner.WriteMode.REUSABLE_EXPERIMENTAL
+                            ? "Verified experimental data "+target.uidHex+". AMS compatibility UNKNOWN."
+                            : "Verified exact clone "+target.uidHex+". Ready to test in the AMS.");refreshStatus();
                         new AlertDialog.Builder(this).setTitle("Tag verified")
-                            .setMessage(result+"\n\nExpected Bambu filament: "+selectedLabel)
+                            .setMessage(result+"\n\nSelected filament: "+selectedLabel+
+                                (mode==TagCloner.WriteMode.REUSABLE_EXPERIMENTAL
+                                    ?"\n\nNEXT: Test in AMS 2 Pro, then inspect the tag's sector permissions again. Do not rewrite until both checks succeed."
+                                    :""))
                             .setPositiveButton("OK",null).show();
                     });
                 }
