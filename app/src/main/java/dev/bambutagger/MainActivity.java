@@ -382,7 +382,7 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
             "You will first scan the destination fob and then confirm its exact UID before the app writes anything.";
         new AlertDialog.Builder(this).setTitle("Prepare to clone RFID tag")
             .setMessage(message).setNegativeButton("Cancel",null)
-            .setPositiveButton("Scan destination",(d,w)->arm(TapAction.PREVIEW_WRITE,"Tap the BLANK or REUSABLE fob once for a read-only check."))
+            .setPositiveButton("Scan destination",(d,w)->arm(TapAction.PREVIEW_WRITE,"Tap the FRESH, factory-formatted fob once for a read-only check."))
             .show();
     }
 
@@ -411,17 +411,24 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
                         action=TapAction.NONE;
                         status="Read UID "+info.uid+"; "+info.readableSectors+"/"+info.sectors+" sectors available.";refreshStatus();
                         new AlertDialog.Builder(this).setTitle("RFID tag scanned")
-                            .setMessage("UID: "+info.uid+"\nSectors readable: "+info.readableSectors+"/16\nFilament family: "+info.material)
+                            .setMessage("UID: "+info.uid+"\nSectors readable: "+info.readableSectors+"/16\nFilament family: "+info.material+
+                                "\nBambu-locked sectors: "+info.lockedBambuSectors+
+                                "\nFactory-writable access: "+(info.factoryWritable?"Yes":"No / unverified"))
                             .setPositiveButton("OK",null).show();
                     });
                 }else if(todo==TapAction.PREVIEW_WRITE){
                     TagCloner.CardInfo info=cloner.inspect(tag);
                     main.post(()->{
                         action=TapAction.NONE;
-                        if(info.readableSectors!=16) {
-                            status="Tag readable in only "+info.readableSectors+"/16 sectors. Not writing.";refreshStatus();
-                            new AlertDialog.Builder(this).setTitle("Unsupported destination")
-                                .setMessage("Not all 16 sectors are readable with known keys. This app will not write a partial or unknown tag.")
+                        if(info.readableSectors!=16 || !info.factoryWritable) {
+                            status="Destination is not a verified factory-writable tag. No write armed.";refreshStatus();
+                            String detail=info.readableSectors!=16
+                                ? "Only "+info.readableSectors+"/16 sectors could be read."
+                                : info.lockedBambuSectors>0
+                                ? info.lockedBambuSectors+" sectors have Bambu read-only permissions (87878769). A successfully cloned CUID fob is normally NOT reusable."
+                                : "Some sectors do not have factory transport permissions (FF078069).";
+                            new AlertDialog.Builder(this).setTitle("Destination not writable")
+                                .setMessage(detail+"\n\nUse a fresh, known-working blue CUID fob. No blocks were modified.")
                                 .setPositiveButton("OK",null).show();return;
                         }
                         String source=info.material==null||info.material.isEmpty()?"Unknown":info.material;
@@ -429,7 +436,7 @@ public final class MainActivity extends Activity implements NfcAdapter.ReaderCal
                             .setMessage("Destination UID: "+info.uid+"\nCurrent data: "+source+
                                 "\n\nProgram as: "+selectedLabel+"\nNew UID: "+selected.uidHex+
                                 "\n\nThis rewrites all 16 sectors and the UID. Some tags cannot be restored. " +
-                                "Only continue if this is your expendable blank or rewritable keyfob. REMOVE it now; you must tap it again to write.")
+                                "Only continue if this is your expendable fresh, factory-formatted keyfob. REMOVE it now; you must tap it again to write.")
                             .setNegativeButton("Cancel",null)
                             .setPositiveButton("Arm write",(d,which)->{
                                 previewUid=info.uid;arm(TapAction.WRITE,"Write armed for UID "+previewUid+". Lift and tap SAME fob again; keep it still.");
